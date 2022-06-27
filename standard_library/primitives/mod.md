@@ -7,7 +7,7 @@ Primitive Types
 - [`char` Type](#char-type)
 - [`str` string slice](#str-string-slice)
 - [静态数组 `[T; N]` and `[T]`](#静态数组-t-n-and-t)
-- [Tuple `(T1, T2)`](#tuple-t1-t2)
+- [Tuple `(T1, T2, ..)`](#tuple-t1-t2-)
 - [Reference `&T` and `&mut T`](#reference-t-and-mut-t)
 - [Pointers `*const T` and `*mut T`](#pointers-const-t-and-mut-t)
 - [Function `fn`](#function-fn)
@@ -134,13 +134,60 @@ Primitive Types
   - `take`, `take_first`, `take_last`
   - `windows`
 
-## Tuple `(T1, T2)`
+## Tuple `(T1, T2, ..)`
+
+- A finite heterogeneous sequence, `(T, U, ..)`.
+- Tuple 的类型由所包含的元素共同决定，比如 `("a", 2)` 的类型为 `(&str, i32)`
+- Tuple 可以看作是简化版的 struct，比如用`(f32, f32)`表示二维坐标。其包含元素的访问使用整数下标，如 `pt.0`，注意只能使用 literal integer 作为下标，而不能使用标量，如 `pt.i`。
+- Tuple 常用于一个函数返回多个值，和模式匹配赋值
+    ```rust
+    fn split_at(&self, mid: usize) -> (&str, &str);
+    let (a, b) = (b, a);
+    ```
+- 非常特别地，空元组 `()` 被称为 Unit Type，Unit Type 只有这一个取值。一般用来标记一种特殊函数的返回类型，即该函数没有有意义的返回值，类似于 C 语言中的 `void` 或 Python 中的 `None` 返回类型。
+- Tuple 没有自己的方法。
 
 ## Reference `&T` and `&mut T`
 
+- Reference 是对某个值的类型指针，在 Rust 中就是对该值的 borrow，而不会获取值的 ownership。
+- 可以通过 `&` 或 `&mut` 作用于一个值，或者通过 `ref` 或 `ref mut` 的 pattern 来创建一个 reference。
+- 对于一个 reference，可以用 `*` operator 来访问其所指向的 value。
+- 在编译阶段 Rust 会跟踪每个 value 的 ownership 和 lifetime。
+  - Rust compiler 不允许出现 null reference, dangling reference, out-bound reference 等。
+  - 一个 ref 不能 outlive 其 owned value 的 lifetime。
+- Reference 分为 immutable-shared ref 和 mutable-exclusive ref。Rust compiler 的 `RwLock` 要求程序在一个时间要么持有一个唯一的 `&mut value` 要么持有若干个 `&value`。
+  - `&mut T` 可以转换成 `&T`，而 `&T` 不能转换成 `&mut T`
+- 对于元素访问，方法调用，比较操作，Compiler 会自动解引用，所以可以直接通过 reference 来执行这些操作，而不需手动解引用。
+
 ## Pointers `*const T` and `*mut T`
+
+- Raw, unsafe pointer，与 C/C++ 中的指针基本等同。
+- Raw pointer 一般用在 `unsafe` block 中，用于 Rust FFI 相关场景。
+- 可以通过 reference 类型转换来创建 raw pointer
+    ```rust
+    let a: i32 = 10;
+    let ptr1: *const i32 = &a;
+    let mut b: i32 = 10;
+    let ptr2 = &mut b as *mut i32;
+    ```
 
 ## Function `fn`
 
+- Function pointer, 如 `fn(usize) -> bool`
+- Function pointers are pointers that points to code, not data.
+- Function pointer 可以像函数一样来调用。
+- Function pointer 不能为空。
+- Function 可以通过 function 或 closure 类型转换来创建
+    ```rust
+    fn add_one(x: i32) -> i32 {
+        x + 1
+    }
+    let fptr1 = add_one;
+    let fptr2 = |x| x + 5;
+    ```
 
-Rust 中几乎每种运算符都对应着一个 trait。
+Rust 标准库新增的数据类型（在 alloc 模块介绍）
+- `Vec`
+- `collections`
+- `Box`
+- `Rc`, `Arc`
