@@ -6,7 +6,11 @@ Primitive Types
 - [Float Types](#float-types)
 - [`char` Type](#char-type)
 - [`str` string slice](#str-string-slice)
-- [slice `[T]`](#slice-t)
+- [静态数组 `[T; N]` and `[T]`](#静态数组-t-n-and-t)
+- [Tuple `(T1, T2)`](#tuple-t1-t2)
+- [Reference `&T` and `&mut T`](#reference-t-and-mut-t)
+- [Pointers `*const T` and `*mut T`](#pointers-const-t-and-mut-t)
+- [Function `fn`](#function-fn)
 
 总结每种类型的常用运算/方法，以及类型间的转换。
 
@@ -100,9 +104,43 @@ Primitive Types
   - `to_lowercase`, `to_uppercase`, `repeat`
   - `as_ptr`,
 
-## slice `[T]`
+## 静态数组 `[T; N]` and `[T]`
 
-- Slice is view into a block of memory represented as a pointer and a length.
+- Array `[T; N]` 类型用来表示一个固定大小 array，大小在编译阶段确定。对应地，标准库提供了 `Vec` 类型，动态大小 array。
+  - 创建 array 的方式有两种：显式列出所有元素，如`[1, 2, 3]`；或指定所有元素的初始值和元素数量，如 `[0; 100]`
+- Slice `[T]` 根据文档定义为 a dynamically-sized view into a contiguous sequence，通常用来表示 array 或 vector 的片段。由于编译阶段不确定长度，Slice不能直接使用，总是通过引用 `&[T]` 或 `&mut [T]` 来使用。所以 `&[T]` 和 `&mut [T]` 常常被直接叫做 Slice。
+  - 引用 `&[T]` 和 `&mut [T]` 是胖指针，包含两个word，包含了指向 Slice 第一个元素的pointer 和 slice 的长度。
+  - Slice 总是基于已有的 array 或 vector 进行创建。如
+    ```rust
+    let vec = vec![1, 2, 3];
+    let slc1 = &mut vec[..];
+    let slc2 = &["zero"; 3];
+    ```
+- Array 可以自动类型转换成 Slice，所以 Slice 的很多方法可以直接用于 Array values。
+- Array 的常用方法有：
+  - `map`, `zip`
+  - `split_array_ref`, `split_array_mut`
+- Slice 的常用方法有
+  - `chunks`, `chunks_mut`, `array_chunks`, `array_chunks_mut`, `as_chunks`, `as_chunks_mut`,
+  - `as_ptr`
+  - `as_simd`, `as_simd_mut`
+  - `get`, `get_mut`, `binary_search`,
+  - `contains`, `stats_with`, `ends_with`, `is_empty`, `is_sorted`
+  - `first`, `last`, `len`
+  - `group_by`, `group_by_mut`
+  - `iter`, `iter_mut`, `into_vec`, `to_vec`
+  - `sort`, `reverse`, `rotate_left`, `swap`
+  - `split_at`, `split`, `split_mut`
+  - `take`, `take_first`, `take_last`
+  - `windows`
+
+## Tuple `(T1, T2)`
+
+## Reference `&T` and `&mut T`
+
+## Pointers `*const T` and `*mut T`
+
+## Function `fn`
 
 
 Rust 中几乎每种运算符都对应着一个 trait。
