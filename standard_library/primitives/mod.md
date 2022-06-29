@@ -158,6 +158,7 @@ Primitive Types
 - Reference 分为 immutable-shared ref 和 mutable-exclusive ref。Rust compiler 的 `RwLock` 要求程序在一个时间要么持有一个唯一的 `&mut value` 要么持有若干个 `&value`。
   - `&mut T` 可以转换成 `&T`，而 `&T` 不能转换成 `&mut T`
 - 对于元素访问，方法调用，比较操作，Compiler 会自动解引用，所以可以直接通过 reference 来执行这些操作，而不需手动解引用。
+  - 比较运算的自动解引用需要注意的是，比较运算符两侧的类型必须一致。比如不能用 u8 ref 和 u8 literal 进行比较。
 
 ## Pointers `*const T` and `*mut T`
 
