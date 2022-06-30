@@ -50,7 +50,6 @@ Inherited mutability
 
 - 这个模块定义了一些与 Vector 相关的 structs。
 - Vector 是特定类型 `T` 的数据集，这些 `T` values 连续地分布在一片 heap 内存上。Vector 的大小是动态的，可以不断插入或抛出 `T` values。
-- Vector 分配的内存空间，会随着 value pushing 而动态增长，但不会随 value poping 而动态收缩。
 - Vector 的索引效率是 `O(1)`, 尾部 pushing/poping value 是 `O(1)`。
 
 ### `Vec` struct: a contiguous growable array type.
