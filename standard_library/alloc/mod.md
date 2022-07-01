@@ -3,6 +3,8 @@
 - [`alloc` module](#alloc-module)
 - [`vec` module](#vec-module)
   - [`Vec` struct: a contiguous growable array type.](#vec-struct-a-contiguous-growable-array-type)
+- [`str`](#str)
+- [`String`](#string)
 
 The `alloc` library provides smart pointers and collections for managing heap-allocated values.
 
@@ -48,15 +50,82 @@ Inherited mutability
 
 ## `vec` module
 
-- 这个模块定义了一些与 Vector 相关的 structs。
+- 这个模块定义了一些与 Vector 的核心 struct `Vec` 和三个相关的 Iterator。
+  - `Drain`: mutable borrow vector 的 slice 创建一个 Iterator
+    ```rust
+    let mut v = vec![1, 2, 3, 4];
+    {
+        let iter = v.drain(1..3);
+        println!("{:?}", iter); // Drain([2, 3])
+    }
+    println!("{:?}", v); // [1, 4]
+    ```
+  - `IntoIter`: move vector 创建一个 Iterator
+    ```rust
+    let v = vec![1, 2, 3];
+    let iter = v.into_iter();
+    println!("{:?}", iter); // IntoIter([1, 2, 3])
+    println!("{:?}", v); // Error: borrow after moved
+    ```
+  - `Splice`: 一个 iterator。`vec.splice(Range, Iter)` 方法使用传入的 Iterator 替换自身的片段，然后被替换的片段作为 `Splice` 返回。不太好理解，不知道典型使用场景。
+    ```rust
+    let mut v = vec![1, 2];
+    {
+        let new = [7, 8];
+        let iter = v.splice(1.., new);
+        println!("{:?}", iter.collect::<Vec<_>>()); // [2]
+    }
+    println!("{:?}", v); // [1, 7, 8]
+    ```
 - Vector 是特定类型 `T` 的数据集，这些 `T` values 连续地分布在一片 heap 内存上。Vector 的大小是动态的，可以不断插入或抛出 `T` values。
 - Vector 的索引效率是 `O(1)`, 尾部 pushing/poping value 是 `O(1)`。
 
 ### `Vec` struct: a contiguous growable array type.
 
-- `pub struct Vec<T, A: Allocator = Global> { /* private fields */ }`
-- `Vec::new()`, `Vec::with_capacity(usize)`
-- `vec.push(T)`, `vec.extend(iter: T)`
-- `vec.pop()`
-- `vec.len()`
+- 数据类型定义 `pub struct Vec<T, A: Allocator = Global> { /* private fields */ }`
+- 一个 vector 在内存上的底层表示：
+    ```
+              pointer      len    capacity
+            +------------+-------+-------+
+    Stack   |  0x01234   |   2   |   4   |
+            +------------+-------+-------+
+                  |
+                  V
+              +------+------+--------+--------+
+    Heap      |  'a' |  'b' | uninit | uninit |
+              +------+------+--------+--------+
+    ```
+- `Vec` will never automatically shrink itself, even if completely empty.
+- `push` and `insert` will (re)allocate when `len == capacity`.
+- `Vec` 的相关方法：
+  - `Vec::new()`, `Vec::with_capacity(usize)`，宏 `vec![]`
+  - `vec.push(T)`, `vec.insert(usize, T)`, `vec.extend(iter: T)`
+  - `vec.append(Vec)`, `vec.split_off(usize) -> Vec`
+  - 索引：`vec[0]`,切片：`vec[..3]`, `&vec`
+  - `vec.pop()`, `vec.swap_remove(usize) -> T`, `vec.remove(usize)`, `vec.drain(Range) -> Iterator`, `vec.clear()`
+  - `vec.len()`, `vec.is_empty()`
+  - `vec.sort()`, `vec.sort_unstable()`, `vec.sort_by()`, `vec.sort_by_key()`
+  - `vec.concat()`, `vec.join(Separator)`
 
+## `str`
+
+- Unicode string slices. 典型的 `str` 是字符串字面值，如 `"hello"`, 生命周期为 `'static` 即这个程序的生命周期。
+- alloc 为 `&str` 定义了一些相关的 iterators
+  - `Bytes`: an iterator over bytes of a string slice, `str.bytes()`
+  - `Chars`: an iterator over chars of a string slice, `str.chars()`
+  - `Lines`: an iterator over the lines of a string, as string slices, `str.lines()`
+  - `Matches`
+  - `Split`
+
+## `String`
+
+- A `String` type has ownership over the contents of the string. 
+- `String` 实现了 `Deref<Target = str>` trait，所有的 `str` 方法可以直接应用在 `String` 上。
+- 创建一个 string 的方法：
+    ```rust
+    let s = "hello".to_string();
+    let s: String = "hello".into();
+    let s = String::from("hello");
+    let s = format!("{}", 123);
+    ```
+- `str` 和 `String` 都不支持索引操作，因为索引操作是一个 `O(1)` 的操作，而 `String` 的每个字符长度可能不同，无法进行 `O(1)` 的索引。
