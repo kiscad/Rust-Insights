@@ -7,6 +7,7 @@
 - [`String`](#string)
 - [`Box<T>`](#boxt)
 - [`Rc<T>`](#rct)
+- [`Weak<T>`](#weakt)
 
 The `alloc` library provides smart pointers and collections for managing heap-allocated values.
 
@@ -174,11 +175,14 @@ Inherited mutability
 	- `Rc::weak_count(this: &Self) -> usize` gets the number of `Weak` pointers to this allocation.
 	- `Rc::strong_count(this: &Self) -> usize` gets the number of strong (`Rc`) pointers to this allocation.
 	- `Rc::ptr_eq(this: &Self, other: &Self) -> bool` returns `true` if the two `Rc`s point to the same allocation.
+
+## `Weak<T>`
+
 - `Weak` is a version of `Rc` that holds a non-owning reference to the managed allocation.
-	- A `Weak` pointer is useful for keeping a temporary reference to the allocation managed by `Rc` without preventing its inner value from being dropped.
-	- It's also used to prevent circular references between `Rc` pointers.
-	- `Weak<T>` 常用的方法有
-		- `weak.upgrade() -> Option<Rc<T>>` attempts to upgrade the `Weak` pointer to an `Rc`, delaying dropping of the inner value if successful.
-		- `weak.as_ptr() -> *const T` returns a raw pointer to the object `T` pointed to by this `Weak<T>`.
-		- `weak.into_raw() -> *const T` consumes the `Weak<T>` and turns it into a raw pointer.
-		- `Weak::from_raw(ptr: *const T)`
+- A `Weak` pointer is useful for keeping a temporary reference to the allocation managed by `Rc` without preventing its inner value from being dropped.
+- It's also used to prevent circular references between `Rc` pointers.
+- `Weak<T>` 常用的方法有
+    - `weak.upgrade() -> Option<Rc<T>>` attempts to upgrade the `Weak` pointer to an `Rc`, delaying dropping of the inner value if successful.
+    - `weak.as_ptr() -> *const T` returns a raw pointer to the object `T` pointed to by this `Weak<T>`.
+    - `weak.into_raw() -> *const T` consumes the `Weak<T>` and turns it into a raw pointer.
+    - `Weak::from_raw(ptr: *const T)`
