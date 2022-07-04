@@ -146,8 +146,8 @@ Inherited mutability
     ```rust
     #[derive(Debug)]
     enum List<T> {
-    Cons(T, Box<List<T>>),
-    Nil,
+        Cons(T, Box<List<T>>),
+        Nil,
     }
     let list = List::Cons(1, Box::new(List::Cons(2, Box::new(List::Nil))));
     ```
