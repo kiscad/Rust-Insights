@@ -5,6 +5,8 @@
   - [`Vec` struct: a contiguous growable array type.](#vec-struct-a-contiguous-growable-array-type)
 - [`str`](#str)
 - [`String`](#string)
+- [`Box<T>`](#boxt)
+- [`Rc<T>`](#rct)
 
 The `alloc` library provides smart pointers and collections for managing heap-allocated values.
 
@@ -129,3 +131,54 @@ Inherited mutability
     let s = format!("{}", 123);
     ```
 - `str` 和 `String` 都不支持索引操作，因为索引操作是一个 `O(1)` 的操作，而 `String` 的每个字符长度可能不同，无法进行 `O(1)` 的索引。
+
+## `Box<T>`
+
+- `Box<T>` is a pointer type, providing the simplest form of heap allocation in Rust.
+- Box pointer 具有 heap application 的 ownership，当 Box pointer 被 drop 时，heap allocation 也会自动释放。
+- Fixed-sized type values 默认时分配在 stack 上的，Box 就提供了将其手动分配在 heap 上的方式。
+    ```rust
+    let val: u8 = 5;  // allocated on stack
+    let boxed: Box<u8> = Box::new(5); // allocated on heap
+    ```
+- Box 也合适来创建 recursive data structure:
+    ```rust
+    #[derive(Debug)]
+    enum List<T> {
+    Cons(T, Box<List<T>>),
+    Nil,
+    }
+    let list = List::Cons(1, Box::new(List::Cons(2, Box::new(List::Nil))));
+    ```
+- `Box<T>` 的常用方法
+	- `Box::new(x: T)` allocates memory on the heap and then places `x` into it.
+	- `Box::from_raw(raw: *mut T)` constructs a box from a raw pointer.
+	- `Box::into_raw(b: Self) -> *mut T` consumes the `Box`, returning a wrapped raw pointer.
+	- `Box::leak<'a>(b: Self) -> &'a mut T` consumes and leaks the `Box`, returning a mutable reference `&'a mut T`.
+		- This function is mainly useful for data that lives for the remainder of the program's life.
+		- Dropping the returned reference will cause a memory leak.
+
+## `Rc<T>`
+
+- `Rc<T>` is a single-threaded reference-counting pointer, providing shared ownership of a value of type `T`, allocated in the heap.
+- `Rc` value 的 clone 方法会创建一个新的 pointer 指向相同的 heap allocation。
+- `Rc` contained value 是 immutable 的。如果需要 mutability, `Rc` contain value 可以设置成 `Cell` 或 `RefCell` type.
+- The `downgrade` method can be used to create a non-owning `Weak` pointer.
+	- A `Weak` pointer can be `upgrade` to an `Rc`, but this will return `None` if the value stored has been dropped.
+- `Rc<T>` 常用的方法有
+	- `Rc::new(value: T)` constructs a new `Rc<T>`
+	- `Rc::into_raw(this: Self) -> *const T` consumes the `Rc`, returning the wrapped pointer.
+	- `Rc::as_ptr(this: &Self) -> *const T` provides a raw pointer to the data.
+	- `Rc::from_raw(ptr: *const T) -> Self` constructs an `Rc<T>` from a raw pointer.
+	- `Rc::downgrade(this: &Self) -> Weak<T>` creates a new `Weak` pointer to this allocation.
+	- `Rc::weak_count(this: &Self) -> usize` gets the number of `Weak` pointers to this allocation.
+	- `Rc::strong_count(this: &Self) -> usize` gets the number of strong (`Rc`) pointers to this allocation.
+	- `Rc::ptr_eq(this: &Self, other: &Self) -> bool` returns `true` if the two `Rc`s point to the same allocation.
+- `Weak` is a version of `Rc` that holds a non-owning reference to the managed allocation.
+	- A `Weak` pointer is useful for keeping a temporary reference to the allocation managed by `Rc` without preventing its inner value from being dropped.
+	- It's also used to prevent circular references between `Rc` pointers.
+	- `Weak<T>` 常用的方法有
+		- `weak.upgrade() -> Option<Rc<T>>` attempts to upgrade the `Weak` pointer to an `Rc`, delaying dropping of the inner value if successful.
+		- `weak.as_ptr() -> *const T` returns a raw pointer to the object `T` pointed to by this `Weak<T>`.
+		- `weak.into_raw() -> *const T` consumes the `Weak<T>` and turns it into a raw pointer.
+		- `Weak::from_raw(ptr: *const T)`
