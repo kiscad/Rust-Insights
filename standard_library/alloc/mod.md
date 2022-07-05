@@ -5,6 +5,12 @@
   - [`Vec` struct: a contiguous growable array type.](#vec-struct-a-contiguous-growable-array-type)
 - [`str`](#str)
 - [`String`](#string)
+- [`Box<T>`](#boxt)
+- [`Rc<T>`](#rct)
+- [`Weak<T>`](#weakt)
+- [Module `alloc::sync`](#module-allocsync)
+- [Module `alloc::borrow`](#module-allocborrow)
+- [Module `alloc::task`](#module-alloctask)
 
 The `alloc` library provides smart pointers and collections for managing heap-allocated values.
 
@@ -129,3 +135,166 @@ Inherited mutability
     let s = format!("{}", 123);
     ```
 - `str` 和 `String` 都不支持索引操作，因为索引操作是一个 `O(1)` 的操作，而 `String` 的每个字符长度可能不同，无法进行 `O(1)` 的索引。
+
+## `Box<T>`
+
+- `Box<T>` is a pointer type, providing the simplest form of heap allocation in Rust.
+- Box pointer 具有 heap application 的 ownership，当 Box pointer 被 drop 时，heap allocation 也会自动释放。
+- Fixed-sized type values 默认时分配在 stack 上的，Box 就提供了将其手动分配在 heap 上的方式。
+    ```rust
+    let val: u8 = 5;  // allocated on stack
+    let boxed: Box<u8> = Box::new(5); // allocated on heap
+    ```
+- Box 也合适来创建 recursive data structure:
+    ```rust
+    #[derive(Debug)]
+    enum List<T> {
+        Cons(T, Box<List<T>>),
+        Nil,
+    }
+    let list = List::Cons(1, Box::new(List::Cons(2, Box::new(List::Nil))));
+    ```
+- `Box<T>` 的常用方法
+	- `Box::new(x: T)` allocates memory on the heap and then places `x` into it.
+	- `Box::from_raw(raw: *mut T)` constructs a box from a raw pointer.
+	- `Box::into_raw(b: Self) -> *mut T` consumes the `Box`, returning a wrapped raw pointer.
+	- `Box::leak<'a>(b: Self) -> &'a mut T` consumes and leaks the `Box`, returning a mutable reference `&'a mut T`.
+		- This function is mainly useful for data that lives for the remainder of the program's life.
+		- Dropping the returned reference will cause a memory leak.
+
+## `Rc<T>`
+
+- `Rc<T>` is a single-threaded reference-counting pointer, providing shared ownership of a value of type `T`, allocated in the heap.
+- `Rc` value 的 clone 方法会创建一个新的 pointer 指向相同的 heap allocation。
+- `Rc` contained value 是 immutable 的。如果需要 mutability, `Rc` contain value 可以设置成 `Cell` 或 `RefCell` type.
+- The `downgrade` method can be used to create a non-owning `Weak` pointer.
+	- A `Weak` pointer can be `upgrade` to an `Rc`, but this will return `None` if the value stored has been dropped.
+- `Rc<T>` 常用的方法有
+	- `Rc::new(value: T)` constructs a new `Rc<T>`
+	- `Rc::into_raw(this: Self) -> *const T` consumes the `Rc`, returning the wrapped pointer.
+	- `Rc::as_ptr(this: &Self) -> *const T` provides a raw pointer to the data.
+	- `Rc::from_raw(ptr: *const T) -> Self` constructs an `Rc<T>` from a raw pointer.
+	- `Rc::downgrade(this: &Self) -> Weak<T>` creates a new `Weak` pointer to this allocation.
+	- `Rc::weak_count(this: &Self) -> usize` gets the number of `Weak` pointers to this allocation.
+	- `Rc::strong_count(this: &Self) -> usize` gets the number of strong (`Rc`) pointers to this allocation.
+	- `Rc::ptr_eq(this: &Self, other: &Self) -> bool` returns `true` if the two `Rc`s point to the same allocation.
+
+## `Weak<T>`
+
+- `Weak` is a version of `Rc` that holds a non-owning reference to the managed allocation.
+- A `Weak` pointer is useful for keeping a temporary reference to the allocation managed by `Rc` without preventing its inner value from being dropped.
+- It's also used to prevent circular references between `Rc` pointers.
+- `Weak<T>` 常用的方法有
+    - `weak.upgrade() -> Option<Rc<T>>` attempts to upgrade the `Weak` pointer to an `Rc`, delaying dropping of the inner value if successful.
+    - `weak.as_ptr() -> *const T` returns a raw pointer to the object `T` pointed to by this `Weak<T>`.
+    - `weak.into_raw() -> *const T` consumes the `Weak<T>` and turns it into a raw pointer.
+    - `Weak::from_raw(ptr: *const T)`
+
+## Module `alloc::sync`
+
+- Module `alloc::sync` 包含了两种 thread-safe reference-counting pointers: `Arc` and `Weak`.
+- Struct `Arc` 代表 Atomically Reference Counted
+	- Type `Arc<T>` provides shared ownership of a value of type `T`, allocated in heap.
+	- `Arc::clone` 会在 stack 上创建一个新的 pointer, 指向相同的 heap allocation。
+
+        ```rust
+        use std::sync::Arc;
+        let a = Arc::new(vec![1, 2, 3]);
+        let b = Arc::clone(&a);
+        ```
+	- 当所有的 pointers 都 dropped，他们所指向的 heap allocation 会自动释放。
+	- `Arc` contained value 默认是 immutable 的，但可以和一些具有 interior mutability 的 Type 嵌套，如 `Mutex`, `RwLock`, `Atomic`，从而变得 mutable。
+        ```rust
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::thread;
+        
+        let val = Arc::new(AtomicUsize::new(5));
+        for _ in 0..10 {
+        let val = Arc::clone(&val);
+        thread.spawn(move || {
+            let v = val.fetch_add(1, Ordering::SeqCst);
+            println!("{v:?}");
+        });
+        }
+        ```
+	- 当 type `T` 是可以 thread 共享或传递的 (implementing `Sync` and `Send` trait)时，`Arc<T>` type 就也可以线程共享与传递。
+	- `Rc<T>` 也可以通过 `downgrade` 方法来创建一个 `Weak` pointer，一般用来 breaking cycles.
+	- `Rc<T>` 实现了 `Deref` trait，所以 `Rc<T>` 可以自动解引用来调用 `T` 的方法
+- `Arc<T>` 常用的方法有
+	- `Arc::new(data: T)` construct a new `Arc<T>`
+	- `Arc::try_unwrap(this: Self) -> Result<T, Self>` returns the inner value, if the `Arc` has exactly one strong reference.
+	- `Arc::as_ptr(this: Self) -> *const T` provides a raw pointer to the data.
+	- `Arc::downgrade(this: &Self) -> Weak<T>` creates a new `Weak` pointer to this allocation.
+	- `Arc::weak_count(this: &Self) -> usize` gets the number of `Weak` pointers to this allocation.
+	- `Arc::strong_count(this: &Self) -> usize` gets the number of strong(`Arc`) pointers to this allocation.
+- Struct `Weak` is a version of `Arc` that holds a non-owning reference to the managed allocation.
+	- The allocation is accessed by calling `upgrade` on the `Weak` pointer, which returns an `Option<Arc<T>>`.
+  
+## Module `alloc::borrow`
+
+- Module `alloc::borrow` 包含了一个 enum `Cow` 和三个 traits `Borrow`, `BorrowMut`, `ToOwned`.
+- Enum type `Cow` is a smart pointer providing clone-on-write functionality:
+	- It can enclose and provide immutable access to borrowed data,
+	- and clone the data lazily when mutation or ownership is required.
+	- The type is designed to work with general borrowed data via the `Borrow` trait.
+- `Cow` 常用的方法有
+	- `cow.to_mut() -> &mut <B as ToOwned>::Owned` acquires a mutable reference to the owned form of the data. Clones the data if it is not owned.
+	  ```rust
+	  use std::borrow::Cow;
+	  let mut cow = Cow::Borrowed("foo");
+	  cow.to_mut().make_ascii_uppercase();
+	  ```
+	- `cow.into_owned() -> <B as ToOwned>::Owned` extracts the owned data. clones the data if it is not already owned.
+- `Borrow` and `BorrowMut` traits
+	- In Rust, it is common to provide different representations of a type for different use cases.
+		- For instance, storage location and management for a value can be specifically chosen as appropriate for a particular use via pointer types such as `Box<T>` or `Rc<T>`.
+	- These types provides access to the underlying data through references to the type of that data. They are said to be "borrowed as" that type.
+	- Types express that they can be borrowed as some type `T` by implement `Borrow<T>`, providing a reference to a `T` in the trait's `borrow` method.
+- `ToOwned` trait, a generalization of `Clone` to borrowed data.
+  collapsed:: true
+	- Some types makes it possible to go from borrowed to owned, usually by implementing the `Clone` trait.
+	- But `Clone` works only for going from `&T` to `T`.
+	- The `ToOwned` trait generalizes `Clone` to construct owned data from any borrow of a given type.
+
+## Module `alloc::task`
+
+- Module `alloc::task` 与异步任务相关，包含了 `Wake` trait.
+- Trait `Wake`
+	- This trait can be used to create a `Waker`. An executor can define an implementation of this trait, and use that to construct a Waker to pass to the tasks that are executed on that executor.
+	- executor 创建一个 `Waker`，然后传递给 async tasks，当一个 async task 的 await ready 之后，就会去叫醒 executor。
+	- 下面的代码，展示了 `block_on` 的工作原理
+	  ```rust
+	  use std::future::Future;
+	  use std::sync::Arc;
+	  use std::task::{Context, Poll, Wake};
+	  use std::thread::{self, Thread};
+	  
+	  /// A waker that wakes up the current thread
+	  stuct ThreadWaker(Thread);
+	  impl Wake for ThreadWaker {
+	    fn wake(self: Arc<Self>) {
+	      self.0.unpark();
+	    }
+	  }
+	  /// run a future to completion on the current thread.
+	  fn block_on<T>(fut: impl Future<Output = T>) -> T {
+	    // pin the future so it can be polled.
+	    let mut fut = Box::pin(fut);
+	    // create a new context to be passed to the future
+	    let t = thread::current();
+	    let waker = Arc::new(ThreadWaker(t)).into();
+	    let mut cx = Context::from_waker(&waker);
+	    // run the future to completion.
+	    loop {
+	      match fut.as_mut().poll(&mut cx) {
+	        Poll::Ready(res) => return res,
+	        Poll::Pending => thread::park(),
+	      }
+	    }
+	  }
+	  
+	  block_on(async {
+	    println!("Hi from inside a future!");
+	  });
+	  ```
