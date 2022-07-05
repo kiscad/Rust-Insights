@@ -16,7 +16,7 @@
 
 ## `Borrow` and `BorrowMut`
 
-- `Borrow` trait 的定义和作用相似，都是提供 reference type conversion。但 `Borrow` trait 多了一个约束: a type should implement `Borrow<T>` only when a `&T` hashes and compares the same way as the value it's borrowed from.
+- `Borrow` trait 的定义和 `AsRef` 作用相似，都是提供 reference type conversion。但 `Borrow` trait 多了一个约束: a type should implement `Borrow<T>` only when a `&T` hashes and compares the same way as the value it's borrowed from.
 - `Borrow` is designed to address a specific situation with generic hash tables and other associative collection types.
 - 比如有一个 `HashMap<String, i32>`，每次调用其 `get` 方法时，我们不希望在 heap 创建一个 String，然后传给 `get` 再 drop。这样非常低效。
 - `HashMap` 的 `get` 方法定义为：

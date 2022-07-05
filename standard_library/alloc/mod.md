@@ -8,6 +8,9 @@
 - [`Box<T>`](#boxt)
 - [`Rc<T>`](#rct)
 - [`Weak<T>`](#weakt)
+- [Module `alloc::sync`](#module-allocsync)
+- [Module `alloc::borrow`](#module-allocborrow)
+- [Module `alloc::task`](#module-alloctask)
 
 The `alloc` library provides smart pointers and collections for managing heap-allocated values.
 
@@ -186,3 +189,112 @@ Inherited mutability
     - `weak.as_ptr() -> *const T` returns a raw pointer to the object `T` pointed to by this `Weak<T>`.
     - `weak.into_raw() -> *const T` consumes the `Weak<T>` and turns it into a raw pointer.
     - `Weak::from_raw(ptr: *const T)`
+
+## Module `alloc::sync`
+
+- Module `alloc::sync` 包含了两种 thread-safe reference-counting pointers: `Arc` and `Weak`.
+- Struct `Arc` 代表 Atomically Reference Counted
+	- Type `Arc<T>` provides shared ownership of a value of type `T`, allocated in heap.
+	- `Arc::clone` 会在 stack 上创建一个新的 pointer, 指向相同的 heap allocation。
+
+        ```rust
+        use std::sync::Arc;
+        let a = Arc::new(vec![1, 2, 3]);
+        let b = Arc::clone(&a);
+        ```
+	- 当所有的 pointers 都 dropped，他们所指向的 heap allocation 会自动释放。
+	- `Arc` contained value 默认是 immutable 的，但可以和一些具有 interior mutability 的 Type 嵌套，如 `Mutex`, `RwLock`, `Atomic`，从而变得 mutable。
+        ```rust
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::thread;
+        
+        let val = Arc::new(AtomicUsize::new(5));
+        for _ in 0..10 {
+        let val = Arc::clone(&val);
+        thread.spawn(move || {
+            let v = val.fetch_add(1, Ordering::SeqCst);
+            println!("{v:?}");
+        });
+        }
+        ```
+	- 当 type `T` 是可以 thread 共享或传递的 (implementing `Sync` and `Send` trait)时，`Arc<T>` type 就也可以线程共享与传递。
+	- `Rc<T>` 也可以通过 `downgrade` 方法来创建一个 `Weak` pointer，一般用来 breaking cycles.
+	- `Rc<T>` 实现了 `Deref` trait，所以 `Rc<T>` 可以自动解引用来调用 `T` 的方法
+- `Arc<T>` 常用的方法有
+	- `Arc::new(data: T)` construct a new `Arc<T>`
+	- `Arc::try_unwrap(this: Self) -> Result<T, Self>` returns the inner value, if the `Arc` has exactly one strong reference.
+	- `Arc::as_ptr(this: Self) -> *const T` provides a raw pointer to the data.
+	- `Arc::downgrade(this: &Self) -> Weak<T>` creates a new `Weak` pointer to this allocation.
+	- `Arc::weak_count(this: &Self) -> usize` gets the number of `Weak` pointers to this allocation.
+	- `Arc::strong_count(this: &Self) -> usize` gets the number of strong(`Arc`) pointers to this allocation.
+- Struct `Weak` is a version of `Arc` that holds a non-owning reference to the managed allocation.
+	- The allocation is accessed by calling `upgrade` on the `Weak` pointer, which returns an `Option<Arc<T>>`.
+  
+## Module `alloc::borrow`
+
+- Module `alloc::borrow` 包含了一个 enum `Cow` 和三个 traits `Borrow`, `BorrowMut`, `ToOwned`.
+- Enum type `Cow` is a smart pointer providing clone-on-write functionality:
+	- It can enclose and provide immutable access to borrowed data,
+	- and clone the data lazily when mutation or ownership is required.
+	- The type is designed to work with general borrowed data via the `Borrow` trait.
+- `Cow` 常用的方法有
+	- `cow.to_mut() -> &mut <B as ToOwned>::Owned` acquires a mutable reference to the owned form of the data. Clones the data if it is not owned.
+	  ```rust
+	  use std::borrow::Cow;
+	  let mut cow = Cow::Borrowed("foo");
+	  cow.to_mut().make_ascii_uppercase();
+	  ```
+	- `cow.into_owned() -> <B as ToOwned>::Owned` extracts the owned data. clones the data if it is not already owned.
+- `Borrow` and `BorrowMut` traits
+	- In Rust, it is common to provide different representations of a type for different use cases.
+		- For instance, storage location and management for a value can be specifically chosen as appropriate for a particular use via pointer types such as `Box<T>` or `Rc<T>`.
+	- These types provides access to the underlying data through references to the type of that data. They are said to be "borrowed as" that type.
+	- Types express that they can be borrowed as some type `T` by implement `Borrow<T>`, providing a reference to a `T` in the trait's `borrow` method.
+- `ToOwned` trait, a generalization of `Clone` to borrowed data.
+  collapsed:: true
+	- Some types makes it possible to go from borrowed to owned, usually by implementing the `Clone` trait.
+	- But `Clone` works only for going from `&T` to `T`.
+	- The `ToOwned` trait generalizes `Clone` to construct owned data from any borrow of a given type.
+
+## Module `alloc::task`
+
+- Module `alloc::task` 与异步任务相关，包含了 `Wake` trait.
+- Trait `Wake`
+	- This trait can be used to create a `Waker`. An executor can define an implementation of this trait, and use that to construct a Waker to pass to the tasks that are executed on that executor.
+	- executor 创建一个 `Waker`，然后传递给 async tasks，当一个 async task 的 await ready 之后，就会去叫醒 executor。
+	- 下面的代码，展示了 `block_on` 的工作原理
+	  ```rust
+	  use std::future::Future;
+	  use std::sync::Arc;
+	  use std::task::{Context, Poll, Wake};
+	  use std::thread::{self, Thread};
+	  
+	  /// A waker that wakes up the current thread
+	  stuct ThreadWaker(Thread);
+	  impl Wake for ThreadWaker {
+	    fn wake(self: Arc<Self>) {
+	      self.0.unpark();
+	    }
+	  }
+	  /// run a future to completion on the current thread.
+	  fn block_on<T>(fut: impl Future<Output = T>) -> T {
+	    // pin the future so it can be polled.
+	    let mut fut = Box::pin(fut);
+	    // create a new context to be passed to the future
+	    let t = thread::current();
+	    let waker = Arc::new(ThreadWaker(t)).into();
+	    let mut cx = Context::from_waker(&waker);
+	    // run the future to completion.
+	    loop {
+	      match fut.as_mut().poll(&mut cx) {
+	        Poll::Ready(res) => return res,
+	        Poll::Pending => thread::park(),
+	      }
+	    }
+	  }
+	  
+	  block_on(async {
+	    println!("Hi from inside a future!");
+	  });
+	  ```
