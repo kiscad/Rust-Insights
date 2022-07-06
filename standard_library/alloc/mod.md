@@ -11,6 +11,7 @@
 - [Module `alloc::sync`](#module-allocsync)
 - [Module `alloc::borrow`](#module-allocborrow)
 - [Module `alloc::task`](#module-alloctask)
+- [Module `alloc::fmt`](#module-allocfmt)
 
 The `alloc` library provides smart pointers and collections for managing heap-allocated values.
 
@@ -298,3 +299,102 @@ Inherited mutability
 	    println!("Hi from inside a future!");
 	  });
 	  ```
+
+## Module `alloc::fmt`
+
+- 这个模块包含了一些 utilities for formatting and printing `String`s. They provide the runtime support for the `format!` syntax extension, to format arguments at runtime into strings.
+- The first argument of `format!` is a **format string**, which has to be a string literal.
+	- The compiler will parse the format string, and determine how the list of **value arguments** are passed to this format string.
+- Format string 会包含一些 **format arguments**，来指代后面的 **value arguments**。
+	- 这种形式的 format argument `{}` 称为 **next argument** specifier, which can be thought of as an iterator over the value arguments.
+	- 这种形式的 format argument `{2}` 称为 **positional argument** specifier, 根据位置来确定指代的 value argument。
+	- Next specifier 和 positional specifier 可以混用而互不干扰，比如
+	  ```rust
+	  format!("{1} {} {0} {}", 1, 2); // "2 1 1 2"
+	  ```
+	- Format string 需要能够用到所有的 value arguments, 否则报编译错误。
+	- `format!` 还支持 named parameters，比如：
+	  ```rust
+	  format!("{a} {b} {c}", a="a", b='b', c=3); // "a b 3"
+	  ```
+	- 当 named parameter 没有提供时, named specifier 可以引用 `format!` 所在 scope 的变量，如
+	  ```rust
+	  fn make_string(a: u32, b: &str) -> String {
+	    format!("{b}, {a}")
+	  }
+	  ```
+- 格式化参数
+	- Width specifier
+	  ```rust
+	  format!("Hello {:5}!", "x"); // "Hello x    !"
+	  format!("Hello {:wd$}!", "x", wd=5); // "Hello x    !"
+	  let wd = 5;
+	  format!("Hello {:wd$}!", "x"); // "Hello x    !"
+	  ```
+	- Alignment/Fill specifier 常常和 width specifier 一起使用
+	  ```rust
+	  format!("hello {:<5}!", "x");  // "hello x    !"
+	  format!("hello {:>5}!", "x");  // "hello     x!"
+	  format!("hello {:^5}!", "x");  // "hello   x  !"
+	  format!("hello {:-^5}!", "x"); // "hello --x--!"
+	  ```
+	- 可以通过一些 flag char 来改变 formatter 的行为
+		- `+` 用来强制显示 numeric value argument 的符号，对非数值参数无效果
+		   ```rust
+		  format!("{:+}", 5); // "+5"
+		  format!("{:+}", 'x'); // "x"
+		  ```
+		- `#?` pretty-print the `Debug` formatting
+		- `#x`, `#X` 使用数值参数的十六进制表示
+		  ```rust
+		  format!("{:#x}", 33); // "0x21"
+		  ```
+		- `#b` 使用数值参数的二进制表示
+		- `#o` 使用数值参数的八进制表示
+		- `0` 指定整数的填充为字符为0
+		  ```rust
+		  format!("{:+05}", -1); // "-0001"
+		  ```
+	- Precision specifier `.N` 或 `.N$`
+		- 对于 float value argument，可以设定显示精度
+		  ```rust
+		  format!("{:.3}", 2.3); // "2.300"
+		  ```
+		- 对于 non-numeric value argument，可以设定 max-width，对于过长的 string 会进行截断。
+		  ```rust
+		  format!("{:.3}", "12.3"); // "12."
+		  ```
+- Escaping
+	- `{` is escaped with `{{`
+	- `}` is escaped with `}}`
+- Formatting traits
+	- 上面介绍的很多 `formatting specifier` 其实都对应着一个 formatting trait, 比如
+		- nothing => `Display`
+		- `?` => `Debug`
+		- `x?` => `Debug` with lower-case hexadecimal integers
+		- `o` => `Octal`
+		- `x` => `LowerHex`
+		- `X` => `UpperHex`
+		- `p` => `Pointer`
+		- `b` => `Binary`
+		- `e` => `LowerExp`
+		- `E` => `UpperExp`
+	- 对于自定义的数据结构，一般需要自己实现上面的 trait, 或使用 derive attribute
+		- 自己实现一个 formatting trait, 需要实现 trait 的方法：`fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result`
+		- ```rust
+		  #[derive(Debug)]
+		  struct Vector2D {
+		    x: isize,
+		    y: isize,
+		  }
+		  ```
+- 与 Formatting 相关的 macros 还有
+	- `write!`, `writeln!` 将 format string 写入参数指定的 stream
+	- `print!`, `println!` 将 format string 写入标准输出流 stdout
+	- `eprint!`, `eprintln!` 将 format string 写入标准错误流 stderr
+	- `format_args!` safely pass around an opaque object describing the format string.
+		- `format_args!` 是所有其他 formatting macros 的基础。
+		- `format_args!` 的功能和 `format!` 很相似，但 `format_args!` 的输出为 `fmt::Agruments` 而不是 `String`.
+		- `Arguments` 有一个特点就是 formatting specifiers 对它不起作用。
+		- `format_args!` 主要在 rust 内部实现中使用
+-
